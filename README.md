@@ -1,3 +1,3 @@
 # La-Ensillada
 
-Rock Scissors Paper game
+Contains all software for Python course
