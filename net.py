@@ -9,8 +9,9 @@ import socket
 BUFFER_SIZE = 1024
 
 # obtains a bound request reply socket to a particular port
-def getConnectedReqRepSocket(host, toWhom):
-    s = getAnyReqRepSocket(host)
+def getConnectedReqRepSocket(fromWhom, toWhom):
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    s.bind((fromWhom, 0))
     s.connect(toWhom)
     return s
 

@@ -12,38 +12,38 @@ import os
 from tkinter import messagebox
 
 # Request Codes
-REGISTER_USER       = "1"
-DE_REGISTER_USER    = "2"
-GET_USER            = "3"
-CALL_USER           = "4"
-GET_TRANSLATOR      = "5"
-BUFFER_MESSAGE      = "6"
-DOWNLOAD_MESSAGES   = "7"
-SET_LANGUAGE        = "8"
-GET_LANGUAGE        = "9"
-ACCEPT_CALL_USER    = "10"
+REGISTER_USER = "1"
+DE_REGISTER_USER = "2"
+GET_USER = "3"
+CALL_USER = "4"
+GET_TRANSLATOR = "5"
+BUFFER_MESSAGE = "6"
+DOWNLOAD_MESSAGES = "7"
+SET_LANGUAGE = "8"
+GET_LANGUAGE = "9"
+ACCEPT_CALL_USER = "10"
 
 # Reply Codes
-USER_REGISTERED     = "0"
-UNABLE_TO_REGISTER  = "1"
-USER_NOT_REG        = "2"
-USER_IS             = "3"
-FINISH_DOWNLOAD     = "4"
-FINISHED_RUNNING    = "5"
-SENDING_MESSAGE     = "6"
-LANGUAGE_USED       = "7"
-USER_CALLING        = "8"
-USER_ACCEPTED_CALL  = "9"
+USER_REGISTERED = "0"
+UNABLE_TO_REGISTER = "1"
+USER_NOT_REG = "2"
+USER_IS = "3"
+FINISH_DOWNLOAD = "4"
+FINISHED_RUNNING = "5"
+SENDING_MESSAGE = "6"
+LANGUAGE_USED = "7"
+USER_CALLING = "8"
+USER_ACCEPTED_CALL = "9"
 
 # constants
 NO_USER = ""
 
 LOCAL_HOST_IP_ADDR = socket.gethostbyname(socket.gethostname())  # Local host IP address
 SERVER = ("192.168.1.189", 65430)
-BABELCHAT_USER = "00013"
-BABELCHAT_CONTACT = "Jesus Bermudez"
-CONTACTS_FILE = "Speaker1 Contacts"
-MESSAGE_FILE = "Speaker1 Messages"
+BABELCHAT_USER = "00001"
+BABELCHAT_CONTACT = "Rich"
+CONTACTS_FILE = "Speaker2 Contacts"
+MESSAGE_FILE = "Speaker2 Messages"
 
 contacts = []  # list of list of contacts. Contains [contacts user id, user name, language spoken]
 
@@ -240,7 +240,6 @@ def SomeoneCalling(data):
     AcceptCallRequest(data, acceptCall)
 
 
-# changes display so that direct communication is shown
 def SetDirectCommMode():
     global directComm
 
@@ -292,11 +291,14 @@ def HandleDirectCalls(lSocket):
 
         SetDirectCommMode()
 
+
 '''
 # accept communication request from the other end
 # this is a thread
 '''
 def HandleDirectComm():
+    global directComm
+    global directCaller
     global streamOther
     global transSocket
 
@@ -362,6 +364,8 @@ def DirectCommDisplay():
 the handling of any entered data depends on the mode we are on - direct communication 
 or buffered 
 '''
+
+
 def inTrayReady(event):
     global transSocket
     global directComm
@@ -370,6 +374,7 @@ def inTrayReady(event):
         DirectCommDisplay()
     else:
         BufferedDisplay()
+
 
 # loads the contacts list box from the contacts list
 def LoadContacs(lBox):
@@ -380,6 +385,7 @@ def LoadContacs(lBox):
         lBox.itemconfig(index, bg="#bdc1d6")
         index += 1
 
+
 # displays on the outTray the received message
 def DispReceivedMessage(msg):
     with outTrayLock:
@@ -388,12 +394,11 @@ def DispReceivedMessage(msg):
                 outTray.insert(0, "...")  # separating line
                 outTray.itemconfig(0, bg="#bdc1d6")
                 outTray.itemconfig(0, foreground="black")
-                contact = GetContact(u)
-                contact = contact.split(" ")
-                data = contact[0][0] + contact[1][0] + ": " + msg[MSG_DATA]
+                data = GetContact(u) + ": " + msg[MSG_DATA]
                 outTray.insert(0, data)
                 outTray.itemconfig(0, bg="#bdc1d6")
                 outTray.itemconfig(0, foreground="black")
+
 
 # displays on the outTray all messages
 def DispMessages():
@@ -406,9 +411,7 @@ def DispMessages():
                         outTray.insert(0, "...")  # separating line
                         outTray.itemconfig(0, bg="#bdc1d6")
                         outTray.itemconfig(0, foreground="black")
-                        contact = GetContact(u)
-                        contact = contact.split(" ")
-                        msg = contact[0][0] + contact[1][0] + ": " + data[MSG_DATA]
+                        msg = GetContact(u) + ": " + data[MSG_DATA]
                         outTray.insert(0, msg)
                         outTray.itemconfig(0, bg="#bdc1d6")
                         outTray.itemconfig(0, foreground="black")
@@ -416,14 +419,18 @@ def DispMessages():
                         outTray.insert(0, "...")  # separating line
                         outTray.insert(0, data[MSG_DATA])
 
+
 # displays all downloaded messages, only used for debugging purposes
 def DispDownLoadedMessages():
     for m in messages:
         print(m)
 
+
 '''
 downloads messages from the server. Only used at start up time.
 '''
+
+
 def DownLoadMessages():
     DownLoadRequest()
     while True:
@@ -440,10 +447,13 @@ def DownLoadMessages():
         if m[0] == SENDING_MESSAGE:
             messages.append(m[1:])
 
+
 '''
 upon select contacts button selects from listbox all the selected contacts 
 places them in the selectedContacts list and displays contacts on the message panel
 '''
+
+
 def SelectContacts(event):
     users = ""
     selectedUsers.clear()
@@ -472,6 +482,8 @@ def SelectContacts(event):
 chooses language from available language in language list box and sets new
 language on server
 '''
+
+
 def SelectLanguage(event):
     language = languageLb.get(tk.ACTIVE)
 
@@ -487,6 +499,8 @@ def SelectLanguage(event):
 '''
 loads the languages list box and chooses current language
 '''
+
+
 def LoadLanguages(lBox):
     for l in languages:
         lBox.insert(l[2], l[0])
@@ -500,6 +514,7 @@ def LoadLanguages(lBox):
 
     lBox.see(index)
     lBox.activate(index)
+
 
 '''
 create user interface. It consists of two panels, each being a canvas widget. The contacts panel
