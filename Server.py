@@ -33,6 +33,10 @@ LANGUAGE_USED       = "7"
 USER_CALLING        = "8"
 USER_ACCEPTED_CALL  = "9"
 
+# Request Codes to translator
+TRANSLATE_CMD           = "0"
+STOP_TRANSLATING_CMD    = "1"
+
 # Constants
 NO_LANG         = "0"
 USER_OFF        = "OFF"
@@ -243,7 +247,6 @@ def CallUserRequest(requestInfo):
     reqRep.sendto(msg.encode(), addr)
     print("Message Sent ", msg)
 
-
 '''
 informs caller whether its attempt to make a direct call failed/succeeded
 data[0] - who is accepting/rejecting, data[1] - from whom it is accepting/rejecting
@@ -288,16 +291,17 @@ def GetLanguageRequest(requestInfo):
     print("Message Sent ", data)
 
 def GetTranslatorRequest(requestInfo):
-
     data = requestInfo.split(",")
     srcLang = GetLang(data[0])      # source language
     dstLang = GetLang(data[1])      # dst language
     addrSpeaker = data[2]           # speaker's address
     portSpeaker = data[3]           # speaker's port
-    print("Handled Request ", "Translator type: ", srcLang, dstLang, "From address and port: ", addrSpeaker, portSpeaker)
     transThread = threading.Thread(target=translate, args=(srcLang, dstLang, addrSpeaker, portSpeaker,))
     transThread.start()
 
+'''
+Thread to translate when the operation is peer to peer
+'''
 def translate(srcLang, dstLang, addrSpeaker, portSpeaker):
     spkSocket = net.getConnectedReqRepSocket(SERVER_HOST, (addrSpeaker, int(portSpeaker)))
     spkSocket.send(b"Translator's whereabouts ")
@@ -305,13 +309,14 @@ def translate(srcLang, dstLang, addrSpeaker, portSpeaker):
 
     while True:
         word = spkSocket.recv(net.BUFFER_SIZE)
-        word = word.decode()
-        result = translator.translate(word, src=srcLang, dest=dstLang)
+        word = word.decode().split(",")
+        if word[0] == STOP_TRANSLATING_CMD:             # stop translating thread?
+            return
+        result = translator.translate(word[1], src=srcLang, dest=dstLang)
         spkSocket.send(result.text.encode())
 
 # handle requests to the server from the speaker
 def HandleRequests(reqRep):
-
     with reqRep:
         while True:
             packet = reqRep.recvfrom(net.BUFFER_SIZE)
@@ -352,10 +357,6 @@ print("Server IP : ", SERVER_HOST, "Server Port :", SERVER_PORT)
 reqRep = net.getThisReqRepSocket((SERVER_HOST, SERVER_PORT))
 HandleRequests(reqRep)
 
-
-
-
-
 '''
 
 from google.cloud import translate_v2 as translate
@@ -370,10 +371,6 @@ if isinstance(text, six.binary_type):
 result = translate_client.translate(text, target_language=target)
 
 return result["translatedText"]
-
-
-
-
 
 '''
 

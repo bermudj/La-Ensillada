@@ -12,28 +12,32 @@ import os
 from tkinter import messagebox
 
 # Request Codes
-REGISTER_USER       = "1"
-DE_REGISTER_USER    = "2"
-GET_USER            = "3"
-CALL_USER           = "4"
-GET_TRANSLATOR      = "5"
-BUFFER_MESSAGE      = "6"
-DOWNLOAD_MESSAGES   = "7"
-SET_LANGUAGE        = "8"
-GET_LANGUAGE        = "9"
-ACCEPT_CALL_USER    = "10"
+REGISTER_USER = "1"
+DE_REGISTER_USER = "2"
+GET_USER = "3"
+CALL_USER = "4"
+GET_TRANSLATOR = "5"
+BUFFER_MESSAGE = "6"
+DOWNLOAD_MESSAGES = "7"
+SET_LANGUAGE = "8"
+GET_LANGUAGE = "9"
+ACCEPT_CALL_USER = "10"
 
 # Reply Codes
-USER_REGISTERED     = "0"
-UNABLE_TO_REGISTER  = "1"
-USER_NOT_REG        = "2"
-USER_IS             = "3"
-FINISH_DOWNLOAD     = "4"
-FINISHED_RUNNING    = "5"
-SENDING_MESSAGE     = "6"
-LANGUAGE_USED       = "7"
-USER_CALLING        = "8"
-USER_ACCEPTED_CALL  = "9"
+USER_REGISTERED = "0"
+UNABLE_TO_REGISTER = "1"
+USER_NOT_REG = "2"
+USER_IS = "3"
+FINISH_DOWNLOAD = "4"
+FINISHED_RUNNING = "5"
+SENDING_MESSAGE = "6"
+LANGUAGE_USED = "7"
+USER_CALLING = "8"
+USER_ACCEPTED_CALL = "9"
+
+# Request Codes to translator
+TRANSLATE_CMD = "0"
+STOP_TRANSLATING_CMD = "1"
 
 # constants
 NO_USER = ""
@@ -114,6 +118,7 @@ def GetContact(user):
         if user == c[0]:
             return c[1]
     return NO_USER
+
 
 ''' Functions to make requests to the server
 record on the server our stream IP address and port number
@@ -215,7 +220,7 @@ def handleServerInput(inSocket):
         if packet[0] == SENDING_MESSAGE:  # received a user message?
             MessageArrived(packet[1])
         elif packet[0] == USER_NOT_REG:  # received a user not registered
-            messagebox.showinfo("User Not Active", GetContact(packet[1]))
+            messagebox.showinfo("Direct Calling", GetContact(packet[1]) + " not available")
         elif packet[0] == USER_CALLING:  # received a call request
             SomeoneCalling(packet[1])
         elif packet[0] == USER_ACCEPTED_CALL:  # received an accept call
@@ -235,10 +240,25 @@ def SomeoneCalling(data):
     global directCaller
 
     directCaller = GetContact(data)
-    msg = directCaller + " is calling"
-    acceptCall = messagebox.askyesno(msg, "Accept Call?")
+    msg = directCaller + " is calling. Accept Call?"
+    acceptCall = messagebox.askyesno("Direct Calling", msg)
     AcceptCallRequest(data, acceptCall)
 
+
+# changes display so that direct communication is shown
+def SetBufferedMode():
+    global directComm
+
+    directComm = False
+    selectedUsers.clear()
+    talkingTo.config(text="")
+    inTray.config(state=tk.DISABLED)
+    outTray.delete(0, tk.END)
+    outTray.config(state=tk.NORMAL)
+    callButton.configure(text="Call Contact")
+    contactsLb.config(state=tk.NORMAL)
+    contactsLb.selection_clear(0, tk.END)
+    languageLb.config(state=tk.NORMAL)
 
 # changes display so that direct communication is shown
 def SetDirectCommMode():
@@ -247,7 +267,8 @@ def SetDirectCommMode():
     directComm = True
     talkingTo.config(text=directCaller)
     inTray.config(state=tk.NORMAL)
-    connectButton.configure(text="disconnect")
+    outTray.delete(0, tk.END)
+    callButton.configure(text="Disconnect")
     contactsLb.config(state=tk.DISABLED)
     languageLb.config(state=tk.DISABLED)
 
@@ -257,20 +278,20 @@ If not give message and leave. Otherwise move to direct communication mode and c
 using byte stream
 '''
 def AcceptCall(data):
-    global streamOther
+    global peerSocket
     global directCaller
 
     data = data.split(",")
     directCaller = GetContact(data[0])
     if data[1] == "TRUE":
         msg = directCaller + " accepted call"
-        messagebox.showinfo("accept call", msg)
+        messagebox.showinfo("Direct Calling", msg)
     else:
         msg = directCaller + " refused call"
-        messagebox.showinfo("accept call", msg)
+        messagebox.showinfo("Direct Calling", msg)
         return
 
-    streamOther = net.getByteStreamSocket((data[2], int(data[3])))
+    peerSocket = net.getByteStreamSocket((data[2], int(data[3])))
     GetTranslatorRequest()
     directCommThread = threading.Thread(target=HandleDirectComm)
     directCommThread.start()  # handle input from other in point to point mode
@@ -281,32 +302,42 @@ def AcceptCall(data):
 # this is a thread
 # need to kill this thread at end
 def HandleDirectCalls(lSocket):
-    global streamOther
+    global peerSocket
 
     while True:
-        streamOther, _ = lSocket.accept()
-
-        GetTranslatorRequest()
-        directCommThread = threading.Thread(target=HandleDirectComm)
-        directCommThread.start()  # handle input from other in point to point mode
-
-        SetDirectCommMode()
+        inputs = [lSocket]
+        readable, _, _ = select.select(inputs, [], [])
+        if readable:
+            for s in readable:
+                if lSocket._closed:
+                    return
+                if s is lSocket:
+                    peerSocket, _ = lSocket.accept()
+                    GetTranslatorRequest()
+                    directCommThread = threading.Thread(target=HandleDirectComm)
+                    directCommThread.start()  # handle input from other in point to point mode
+                    SetDirectCommMode()
 
 '''
 # accept communication request from the other end
 # this is a thread
 '''
 def HandleDirectComm():
-    global streamOther
+    global peerSocket
     global transSocket
 
     while True:
-        inputs = [streamOther, transSocket]
+        inputs = [peerSocket, transSocket]
         readable, _, _ = select.select(inputs, [], [])
         if readable:
             for s in readable:
-                if s is streamOther:
-                    data = streamOther.recv(net.BUFFER_SIZE)
+                if s is peerSocket:
+                    if peerSocket._closed:
+                        return
+                    data = peerSocket.recv(net.BUFFER_SIZE)
+                    if not data:  # other end close connection?
+                        Disconnect()
+                        return
                     inTray.delete(0, tk.END)
                     with outTrayLock:
                         outTray.insert(0, "...")  # separating line
@@ -315,16 +346,32 @@ def HandleDirectComm():
                         outTray.itemconfig(0, foreground="black")
                 if s is transSocket:
                     data = transSocket.recv(net.BUFFER_SIZE)
-                    streamOther.send(data)
+                    peerSocket.send(data)
 
 # once we choose a contact to communicate with
-def callContacts():
+def CallButton():
+    caption = callButton.cget("text")
+    if caption == "Call Contact":
+        CallContacts()
+    else:
+        Disconnect()
+
+def Disconnect():
+    global transSocket
+
+    peerSocket.close()  # close peer connection
+    data = STOP_TRANSLATING_CMD
+    transSocket.send(data.encode())  # stop translating thread
+
+    SetBufferedMode()
+
+def CallContacts():
     if (len(selectedUsers) > 1):
-        messagebox.showwarning("Direct Call to Contact", "Can only connect to one contact at a time")
+        messagebox.showwarning("Direct Calling", "Can only connect to one contact at a time")
         return
 
     if (len(selectedUsers) == 0):
-        messagebox.showwarning("Direct Call to Contact", "Need to specify a contact")
+        messagebox.showwarning("Direct Calling", "Need to specify a contact")
         return
 
     # request from server contact's details
@@ -352,7 +399,8 @@ send message directly to other user, then display it
 '''
 def DirectCommDisplay():
     msg = inTray.get()
-    transSocket.send(msg.encode())
+    data = TRANSLATE_CMD + "," + msg
+    transSocket.send(data.encode())
     inTray.delete(0, len(msg))
     with outTrayLock:
         outTray.insert(0, "...")  # separating line between messages
@@ -467,7 +515,6 @@ def SelectContacts(event):
 
     DispMessages()
 
-
 '''
 chooses language from available language in language list box and sets new
 language on server
@@ -482,7 +529,6 @@ def SelectLanguage(event):
             break
 
     SetLanguageRequest(code)
-
 
 '''
 loads the languages list box and chooses current language
@@ -545,8 +591,8 @@ messagePanel.grid(row=0, column=1)
 talkingTo = tk.Label(win, text="      ")
 messagePanel.create_window(40, 15, anchor=tk.NW, window=talkingTo)
 
-connectButton = tk.Button(win, text="Call Contact", command=callContacts)
-messagePanel.create_window(320, 20, anchor=tk.NW, window=connectButton)
+callButton = tk.Button(win, text="Call Contact", command=CallButton)
+messagePanel.create_window(320, 20, anchor=tk.NW, window=callButton)
 
 outTray = tk.Listbox(win, exportselection=0)
 messagePanel.create_window(10, 50, anchor=tk.NW, width=400, height=150, window=outTray)
@@ -561,7 +607,7 @@ outTray.configure(xscrollcommand=outTrayHSb.set)
 outTrayHSb.config(command=outTray.xview)
 messagePanel.create_window(10, 200, anchor=tk.NW, width=400, window=outTrayHSb)
 
-enterLabel = tk.Label(win, text="Send a message:")
+enterLabel = tk.Label(win, text="Send message:")
 messagePanel.create_window(10, 220, anchor=tk.NW, window=enterLabel)
 
 inTray = tk.Entry(win)
@@ -639,6 +685,8 @@ tell server we have finished
 '''
 DeRegisterUserRequest()
 
+lSocket.close()  # shutdown cleanly thread to accept direct calls
+
 '''
 save all messages on a file for permanent storage
 '''
@@ -646,25 +694,3 @@ SaveMessages()
 
 exit()
 
-'''    
-
-
-
-    # request a translator
-    # get translator socket to exchange with server
-    transSocket = net.getAnyReqRepSocket(LOCAL_HOST_IP_ADDR)
-    myDetails = transSocket.getsockname()
-
-    data = GET_TRANSLATOR + "," + BABELCHAT_USER + "," + user + "," + myDetails[0] + "," + str(myDetails[1])
-    toServerSocket.send(data.encode())
-
-    data = transSocket.recvfrom(net.BUFFER_SIZE)
-    transLocation = (data[1][0], data[1][1])
-    transSocket.connect(transLocation)
-
-    # netThread = threading.Thread(target=handleNet, args=(transSocket, streamOther, outTray))
-    # netThread.start()
-
-
-    connectButton.configure(text="disconnect")
-'''
