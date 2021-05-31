@@ -10,8 +10,6 @@ Jesús A Bermúdez Silva
 import socket
 BUFFER_SIZE = 1024              # maximum size buffer in UDP reads
 
-
-
 '''
 obtains a bound request reply socket to a particular port
 '''

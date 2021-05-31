@@ -146,6 +146,7 @@ def SetDirectCommMode():
     global directCaller
 
     directComm = True
+    selectedUsers.clear()
     talkingTo.config(text=directCaller)
     inTray.config(state=tk.NORMAL)
     outTray.delete(0, tk.END)
@@ -431,11 +432,11 @@ choice
 def SomeoneCalling(data):
     global directCaller
 
-    directCaller = GetContact(data)
-    msg = directCaller + " is calling. Accept Call?"
+    msg = GetContact(data) + " is calling. Accept Call?"
     acceptCall = messagebox.askyesno(SUB_WINDOWS_TITLE, "Direct Calling: " + msg)
     AcceptCallRequest(data, acceptCall)
     if acceptCall:
+        directCaller = GetContact(data)
         directCallsThread = threading.Thread(target=HandleDirectCalls, args=(lSocket,), daemon=True)
         directCallsThread.start()  # handle direct calls
 
@@ -449,17 +450,19 @@ def AcceptCall(data):
     global directCaller
 
     data = data.split(",")
-    directCaller = GetContact(data[0])
     if data[1] == "FALSE":
-        messagebox.showinfo(SUB_WINDOWS_TITLE, "Direct Calling: " +  directCaller + " refused call")
+        messagebox.showinfo(SUB_WINDOWS_TITLE, "Direct Calling: " +  GetContact(data[0]) + " refused call")
         directCaller = ""
         return
 
-    with peerLock:
-        if peerSocket != None:
-            peerSocket.close()
-            peerSocket = None
-        peerSocket = net.ConnectedStreamSocket((data[2], int(data[3])))
+    directCaller = GetContact(data[0])
+
+    # rudely disconnect from who ever we were connected to
+    if peerSocket != None:
+        peerSocket.close()
+
+    # as it stands is a memory leak and two threads could possibly corrupt socket
+    peerSocket = net.ConnectedStreamSocket((data[2], int(data[3])))
     GetTranslatorRequest()
     directCommThread = threading.Thread(target=HandleDirectComm, daemon=True)
     directCommThread.start()                # handle input from other in point to point mode
@@ -475,23 +478,23 @@ accept communication request from the other end
 this is a daemon thread, it dies by itself when program finished
 '''
 def HandleDirectCalls(lSocket):
-        global peerSocket
+    global peerSocket
 
-#    while True:
-        inputs = [lSocket]
-        readable, _, _ = select.select(inputs, [], [])
-        if readable:
-            for s in readable:
-                if s == lSocket:
-                    with peerLock:
-                        if peerSocket != None:
-                            peerSocket.close()
-                            peerSocket = None
-                        peerSocket, _ = lSocket.accept()
-                    GetTranslatorRequest()
-                    directCommThread = threading.Thread(target=HandleDirectComm, daemon=True)
-                    directCommThread.start()  # handle input from other in point to point mode
-                    SetDirectCommMode()
+    inputs = [lSocket]
+    readable, _, _ = select.select(inputs, [], [])
+    if readable:
+        for s in readable:
+            if s == lSocket:
+                # rudely disconnect from who ever we were connected to
+                if peerSocket != None:
+                    peerSocket.close()
+
+                # as it stands is a memory leak and two threads could possibly corrupt socket
+                peerSocket, _ = lSocket.accept()
+                GetTranslatorRequest()
+                directCommThread = threading.Thread(target=HandleDirectComm, daemon=True)
+                directCommThread.start()  # handle input from other in point to point mode
+                SetDirectCommMode()
 
 '''
 thread to handle the direct communication mode, where translator input is sent to peer,
@@ -524,7 +527,7 @@ def DoPeerSocket():
     try:
         data = peerSocket.recv(net.BUFFER_SIZE)
     except ConnectionResetError:
-        messagebox.showinfo(SUB_WINDOWS_TITLE, "Lost connection to " + directCaller)
+        messagebox.showinfo(SUB_WINDOWS_TITLE, "Lost call to " + directCaller)
         Disconnect()
         return False
     if not data:  # other end close connection?
@@ -765,7 +768,6 @@ These are locks to ensure that
 '''
 messageLock = threading.Lock()  # no simultaneous access to message list
 outTrayLock = threading.Lock()  # no simultaneous access to outTray
-peerLock    = threading.Lock()  # no simultaneous access to peerSocket
 
 '''
 handle network activity
