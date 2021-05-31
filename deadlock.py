@@ -173,11 +173,13 @@ send message directly to other user, then display it
 '''
 def DirectCommDisplay(msg):
     data = prot.TRANSLATE_CMD + "," + msg
-    transSocket.send(data.encode())
     inTray.delete(0, len(msg))
     with outTrayLock:
         outTray.insert(0, "...")  # separating line between messages
         outTray.insert(0, msg)
+    print("Getting transLock about to send in master thread")
+    with transLock:
+        transSocket.send(data.encode())
 
 '''
 displays on the outTray the received message
@@ -410,7 +412,7 @@ def handleServerInput(inSocket):
             messagebox.showinfo(SUB_WINDOWS_TITLE, "Direct Calling: " + GetContact(packet[1]) + " not available")
         elif packet[0] == prot.USER_CALLING:  # received a call request
             SomeoneCalling(packet[1])
-        elif packet[0] == prot.USER_ACCEPTED_CALL:  # received an accept/reject notification
+        elif packet[0] == prot.USER_ACCEPTED_CALL:  # received an accept call
             AcceptCall(packet[1])
         elif packet[0] == prot.DE_REGISTERED_COMPLETE:
             return
@@ -435,9 +437,6 @@ def SomeoneCalling(data):
     msg = directCaller + " is calling. Accept Call?"
     acceptCall = messagebox.askyesno(SUB_WINDOWS_TITLE, "Direct Calling: " + msg)
     AcceptCallRequest(data, acceptCall)
-    if acceptCall:
-        directCallsThread = threading.Thread(target=HandleDirectCalls, args=(lSocket,), daemon=True)
-        directCallsThread.start()  # handle direct calls
 
 '''
 Handle whether the contact one has attempted to call directly has accepted one's attempt or not.
@@ -461,7 +460,7 @@ def AcceptCall(data):
             peerSocket = None
         peerSocket = net.ConnectedStreamSocket((data[2], int(data[3])))
     GetTranslatorRequest()
-    directCommThread = threading.Thread(target=HandleDirectComm, daemon=True)
+    directCommThread = threading.Thread(target=HandleDirectComm)
     directCommThread.start()                # handle input from other in point to point mode
 
     SetDirectCommMode()
@@ -475,9 +474,9 @@ accept communication request from the other end
 this is a daemon thread, it dies by itself when program finished
 '''
 def HandleDirectCalls(lSocket):
-        global peerSocket
+    global peerSocket
 
-#    while True:
+    while True:
         inputs = [lSocket]
         readable, _, _ = select.select(inputs, [], [])
         if readable:
@@ -489,42 +488,44 @@ def HandleDirectCalls(lSocket):
                             peerSocket = None
                         peerSocket, _ = lSocket.accept()
                     GetTranslatorRequest()
-                    directCommThread = threading.Thread(target=HandleDirectComm, daemon=True)
+                    directCommThread = threading.Thread(target=HandleDirectComm)
                     directCommThread.start()  # handle input from other in point to point mode
                     SetDirectCommMode()
 
 '''
-thread to handle the direct communication mode, where translator input is sent to peer,
-and other peer input is displayed. 
+====================== END of functions used by the input from server thread =======================
+'''
+'''
+# accept communication request from the other end
+# this is a thread
 '''
 def HandleDirectComm():
     global peerSocket
     global transSocket
 
     while True:
-        inputs = [peerSocket, transSocket]
-        readable, _, _ = select.select(inputs, [], [])
-        if readable:
-            for s in readable:
-                if s is peerSocket:
-                    if not DoPeerSocket():
-                        return
-                elif s is transSocket:
-                    data = transSocket.recv(net.BUFFER_SIZE)
-                    peerSocket.send(data)
+        print("getting translock in receiving in slave thread")
+        with transLock:
+            inputs = [peerSocket, transSocket]
+            readable, _, _ = select.select(inputs, [], [])
+            if readable:
+                for s in readable:
+                    if s is peerSocket:
+                        if not DoPeerSocket():
+                            return
+                    if s is transSocket:
+                        data = transSocket.recv(net.BUFFER_SIZE)
+                        peerSocket.send(data)
 
 '''
-handle the activity from the peerSocket
+handle the activity in the peerSocket
 '''
 def DoPeerSocket():
-    global directCaller
-
     if peerSocket._closed:
         return False
     try:
         data = peerSocket.recv(net.BUFFER_SIZE)
     except ConnectionResetError:
-        messagebox.showinfo(SUB_WINDOWS_TITLE, "Lost connection to " + directCaller)
         Disconnect()
         return False
     if not data:  # other end close connection?
@@ -538,7 +539,6 @@ def DoPeerSocket():
         outTray.itemconfig(0, bg="#bdc1d6")
         outTray.itemconfig(0, foreground="black")
     return True
-
 '''
 GUI event handlers. The possible events are call button pressed, change language
 choose contact, in tray ready
@@ -766,12 +766,15 @@ These are locks to ensure that
 messageLock = threading.Lock()  # no simultaneous access to message list
 outTrayLock = threading.Lock()  # no simultaneous access to outTray
 peerLock    = threading.Lock()  # no simultaneous access to peerSocket
-
+transLock   = threading.Lock()
 '''
 handle network activity
 '''
 serverThread = threading.Thread(target=handleServerInput, args=(fromServerSocket,))
 serverThread.start()  # handle input from the server
+
+directCallsThread = threading.Thread(target=HandleDirectCalls, args=(lSocket,), daemon=True)
+directCallsThread.start()  # handle direct calls
 
 '''
 handle input from the user

@@ -1,6 +1,11 @@
 '''
-Speaker module
-14/04/21
+Babel Chat Speaker module
+
+This is a client to the Babel Chat server.
+
+Began on 14/04/21
+Modified 31/05/21
+
 Jesús A Bermúdez Silva
 '''
 import tkinter as tk
@@ -9,59 +14,39 @@ import select
 import net
 import threading
 import os
+import prot
 from tkinter import messagebox
-
-# Request Codes
-REGISTER_USER = "1"
-DE_REGISTER_USER = "2"
-GET_USER = "3"
-CALL_USER = "4"
-GET_TRANSLATOR = "5"
-BUFFER_MESSAGE = "6"
-DOWNLOAD_MESSAGES = "7"
-SET_LANGUAGE = "8"
-GET_LANGUAGE = "9"
-ACCEPT_CALL_USER = "10"
-
-# Reply Codes
-USER_REGISTERED = "0"
-UNABLE_TO_REGISTER = "1"
-USER_NOT_REG = "2"
-USER_IS = "3"
-FINISH_DOWNLOAD = "4"
-FINISHED_RUNNING = "5"
-SENDING_MESSAGE = "6"
-LANGUAGE_USED = "7"
-USER_CALLING = "8"
-USER_ACCEPTED_CALL = "9"
-
-# Request Codes to translator
-TRANSLATE_CMD = "0"
-STOP_TRANSLATING_CMD = "1"
 
 # constants
 NO_USER = ""
 
-LOCAL_HOST_IP_ADDR = socket.gethostbyname(socket.gethostname())  # Local host IP address
-SERVER = ("192.168.1.189", 65430)
-BABELCHAT_USER = "00001"
-BABELCHAT_CONTACT = "Rich Cochran"
-CONTACTS_FILE = "Speaker2 Contacts"
-MESSAGE_FILE = "Speaker2 Messages"
+LOCAL_HOST_IP_ADDR  = socket.gethostbyname(socket.gethostname())  # Local host IP address
+SERVER              = ("192.168.1.189", 65430)
+BABELCHAT_USER      = "00001"
+BABELCHAT_CONTACT   = "Rich Conchrad"
+CONTACTS_FILE       = "Speaker2 Contacts"
+MESSAGE_FILE        = "Speaker2 Messages"
+
+SUB_WINDOWS_TITLE   = "Babel Chat   " + BABELCHAT_CONTACT
 
 contacts = []  # list of list of contacts. Contains [contacts user id, user name, language spoken]
 
-# list of lists that will contain messages buffered by the speaker for and from the different users
-# each list has format
-# user Id message to whom, user Id message from whom, message
-MSG_TO = 0
-MSG_FROM = 1
-MSG_DATA = 2
-messages = []  # list of messages. Contains [user id of to whom, user id of from whom, message]
+'''
+list of lists that will contain messages buffered by the speaker for and from the different users
+each list has format
+user Id message to whom, user Id message from whom, message
+'''
+MSG_TO      = 0
+MSG_FROM    = 1
+MSG_DATA    = 2
+messages    = []  # list of messages. Contains [user id of to whom, user id of from whom, message]
 
 selectedUsers = []  # list of selected users. Contains [contacts user id]
 
-# list to map available languages to google translate language codes and their position on the listbox
+'''
+list to map available languages to google translate language codes and their position on the 
+languages listbox
+'''
 languages = [
     ["English", "en", 0],
     ["French", "fr", 1],
@@ -70,14 +55,21 @@ languages = [
     ["Spanish", "es", 4]
 ]
 
-
-# displays the contacts
+'''
+======================================================================================
+=======================  UTILITY functions ===========================================
+======================================================================================
+'''
+'''
+displays the contacts
+'''
 def DispContacts():
     for c in contacts:
         print(c)
 
-
-# loads the contacts list from a configuration file
+'''
+loads the contacts list from a configuration file
+'''
 def LoadContacts():
     if (os.path.isfile(CONTACTS_FILE)):
         with open(CONTACTS_FILE, "r") as contactsFile:
@@ -85,10 +77,11 @@ def LoadContacts():
                 contact = line[:len(line) - 1].split(",")
                 contacts.append(contact)
     else:
-        messagebox.showwarning("Loading Contacts", "No contacts file")
+        messagebox.showwarning(SUB_WINDOWS_TITLE, "Loading Contacts - No contacts file")
 
-
-# load messages from the message file
+'''
+load messages from the message file
+'''
 def LoadMessages():
     if (os.path.isfile(MESSAGE_FILE)):
         with open(MESSAGE_FILE, "r") as msgFile:
@@ -98,10 +91,11 @@ def LoadMessages():
                 msg = line.split(",", 2)  # split into from, to, msg. The message may have commas
                 messages.append(msg)
     else:
-        messagebox.showwarning("Loading Messages", "No messages file - new one created")
+        messagebox.showwarning(SUB_WINDOWS_TITLE, "Loading Messages. No messages file - new one created")
 
-
-# Store all the messages into a file
+'''
+Store all the messages into a file for permanent storage purposes
+'''
 def SaveMessages():
     with open(MESSAGE_FILE, "w") as msgFile:
         for m in messages:
@@ -109,152 +103,27 @@ def SaveMessages():
             str += "\n"
             msgFile.write(str)
 
-
-# get a contact's user identifier from a contacts's name
+'''
+get a contact's user identifier from a contacts's name
+'''
 def GetUser(contact):
     for c in contacts:
         if contact == c[1]:
             return c[0]
     return NO_USER
 
-
-# get a contact's name from a contact's user identifier
+'''
+get a contact's name from a contact's user identifier
+'''
 def GetContact(user):
     for c in contacts:
         if user == c[0]:
             return c[1]
     return NO_USER
 
-
-''' Functions to make requests to the server
-record on the server our stream IP address and port number
-MESSAGE_TYPE, FROM_WHOM, STREAM_IP_ADDRESS, STREAM_PORT_NUMBER
 '''
-def RegisterUserRequest(reqRep, stream):
-    data = REGISTER_USER + "," + BABELCHAT_USER + "," + reqRep[0] + "," + str(reqRep[1]) + "," + stream[0] + "," + str(
-        stream[1])
-    toServerSocket.send(data.encode())
-
-    fromServerSocket.settimeout(1.5)
-    try:
-        data = fromServerSocket.recv(net.BUFFER_SIZE)
-    except socket.timeout:
-        messagebox.showerror("Registering Chat", "Could not register chat - No server")
-        exit(0)
-    fromServerSocket.settimeout(None)
-    data = data.decode()
-    if data == UNABLE_TO_REGISTER:
-        messagebox.showerror("Registering Chat", "Could not register chat")
-        exit(0)
-    if data == USER_REGISTERED:
-        return
-
-# tells server the user is no longer active
-def DeRegisterUserRequest():
-    data = DE_REGISTER_USER + "," + BABELCHAT_USER
-    toServerSocket.send(data.encode())
-
-# requests the given user's details from the server
-def GetUserRequest(user):
-    data = GET_USER + "," + BABELCHAT_USER + "," + user
-    toServerSocket.send(data.encode())
-
-# attempts a call to the given user
-def CallUserRequest(user):
-    data = CALL_USER + "," + BABELCHAT_USER + "," + user
-    toServerSocket.send(data.encode())
-
-# accepts/refuses a call request from a given user
-def AcceptCallRequest(user, accept):
-    if accept:
-        acceptCall = "TRUE"
-    else:
-        acceptCall = "FALSE"
-    data = ACCEPT_CALL_USER + "," + BABELCHAT_USER + "," + user + "," + acceptCall
-    toServerSocket.send(data.encode())
-
-
-# send message to buffer to server
-def BufferMessageRequest(user, msg):
-    # MESSAGE_TYPE, FOR_WHOM, FROM_WHOM, DATA
-    data = BUFFER_MESSAGE + "," + user + "," + BABELCHAT_USER + "," + msg
-    toServerSocket.send(data.encode())
-
-
-# Down load messages from server
-def DownLoadRequest():
-    data = DOWNLOAD_MESSAGES + "," + BABELCHAT_USER
-    toServerSocket.send(data.encode())
-
-
-# get language user currently speaks
-def GetLanguageRequest():
-    data = GET_LANGUAGE + "," + BABELCHAT_USER
-    toServerSocket.send(data.encode())
-    packet = fromServerSocket.recv(net.BUFFER_SIZE)
-    data = packet.decode().split(",")
-    return data[1]
-
-# set new language at server
-def SetLanguageRequest(code):
-    data = SET_LANGUAGE + "," + BABELCHAT_USER + "," + code
-    toServerSocket.send(data.encode())
-
-# request a translator
-# get translator socket to exchange with server
-def GetTranslatorRequest():
-    global directCaller
-    global transSocket
-
-    transSocket = net.getAnyReqRepSocket(LOCAL_HOST_IP_ADDR)
-    myDetails = transSocket.getsockname()
-
-    callingUser = GetUser(directCaller)
-    data = GET_TRANSLATOR + "," + BABELCHAT_USER + "," + callingUser + "," + myDetails[0] + "," + str(myDetails[1])
-    toServerSocket.send(data.encode())
-
-    data = transSocket.recvfrom(net.BUFFER_SIZE)
-    transLocation = (data[1][0], data[1][1])
-    transSocket.connect(transLocation)
-
+changes display so that buffered mode communication is on
 '''
-Handle input/output from the network. This runs as a separate thread from the main program thread.
-The only shared resource is the message list. The code to access this resource from this thread
-is protected by a lock
-'''
-def handleServerInput(inSocket):
-    while True:
-        packet = inSocket.recv(net.BUFFER_SIZE)
-        packet = packet.decode().split(",", 1)  # split into code, the rest
-        if packet[0] == SENDING_MESSAGE:  # received a user message?
-            MessageArrived(packet[1])
-        elif packet[0] == USER_NOT_REG:  # received a user not registered
-            messagebox.showinfo("Direct Calling", GetContact(packet[1]) + " not available")
-        elif packet[0] == USER_CALLING:  # received a call request
-            SomeoneCalling(packet[1])
-        elif packet[0] == USER_ACCEPTED_CALL:  # received an accept call
-            AcceptCall(packet[1])
-        elif packet[0] == FINISHED_RUNNING:
-            return
-
-# when a buffered message arrives store it in the message queue and display it on the outTray
-def MessageArrived(data):
-    msg = data.split(",", 2)  # split into from, to, msg
-    with messageLock:
-        messages.append(msg)  # append it to messages list
-    DispReceivedMessage(msg)  # shows message in outTray
-
-
-def SomeoneCalling(data):
-    global directCaller
-
-    directCaller = GetContact(data)
-    msg = directCaller + " is calling. Accept Call?"
-    acceptCall = messagebox.askyesno("Direct Calling", msg)
-    AcceptCallRequest(data, acceptCall)
-
-
-# changes display so that direct communication is shown
 def SetBufferedMode():
     global directComm
 
@@ -269,9 +138,12 @@ def SetBufferedMode():
     contactsLb.selection_clear(0, tk.END)
     languageLb.config(state=tk.NORMAL)
 
-# changes display so that direct communication is shown
+'''
+changes display so that direct communication mode is on
+'''
 def SetDirectCommMode():
     global directComm
+    global directCaller
 
     directComm = True
     talkingTo.config(text=directCaller)
@@ -282,117 +154,10 @@ def SetDirectCommMode():
     languageLb.config(state=tk.DISABLED)
 
 '''
-Handle whether the contact one has attempted to call directly has accepted one's attempt or not.
-If not give message and leave. Otherwise move to direct communication mode and connect directly 
-using byte stream
-'''
-def AcceptCall(data):
-    global peerSocket
-    global directCaller
-
-    data = data.split(",")
-    directCaller = GetContact(data[0])
-    if data[1] == "TRUE":
-        msg = directCaller + " accepted call"
-        messagebox.showinfo("Direct Calling", msg)
-    else:
-        msg = directCaller + " refused call"
-        messagebox.showinfo("Direct Calling", msg)
-        return
-
-    peerSocket = net.getByteStreamSocket((data[2], int(data[3])))
-    GetTranslatorRequest()
-    directCommThread = threading.Thread(target=HandleDirectComm)
-    directCommThread.start()  # handle input from other in point to point mode
-
-    SetDirectCommMode()
-
-# accept communication request from the other end
-# this is a thread
-# need to kill this thread at end
-def HandleDirectCalls(lSocket):
-    global peerSocket
-
-    while True:
-        inputs = [lSocket]
-        readable, _, _ = select.select(inputs, [], [])
-        if readable:
-            for s in readable:
-                if lSocket._closed:
-                    return
-                if s is lSocket:
-                    peerSocket, _ = lSocket.accept()
-                    GetTranslatorRequest()
-                    directCommThread = threading.Thread(target=HandleDirectComm)
-                    directCommThread.start()  # handle input from other in point to point mode
-                    SetDirectCommMode()
-
-'''
-# accept communication request from the other end
-# this is a thread
-'''
-def HandleDirectComm():
-    global peerSocket
-    global transSocket
-
-    while True:
-        inputs = [peerSocket, transSocket]
-        readable, _, _ = select.select(inputs, [], [])
-        if readable:
-            for s in readable:
-                if s is peerSocket:
-                    if peerSocket._closed:
-                        return
-                    data = peerSocket.recv(net.BUFFER_SIZE)
-                    if not data:  # other end close connection?
-                        Disconnect()
-                        return
-                    inTray.delete(0, tk.END)
-                    with outTrayLock:
-                        outTray.insert(0, "...")  # separating line
-                        outTray.insert(0, data.decode())
-                        outTray.itemconfig(0, bg="#bdc1d6")
-                        outTray.itemconfig(0, foreground="black")
-                if s is transSocket:
-                    data = transSocket.recv(net.BUFFER_SIZE)
-                    peerSocket.send(data)
-
-# once we choose a contact to communicate with
-def CallButton():
-    caption = callButton.cget("text")
-    if caption == "Call Contact":
-        CallContacts()
-    else:
-        Disconnect()
-
-def Disconnect():
-    global transSocket
-
-    peerSocket.close()  # close peer connection
-    data = STOP_TRANSLATING_CMD
-    transSocket.send(data.encode())  # stop translating thread
-
-    SetBufferedMode()
-
-def CallContacts():
-    if (len(selectedUsers) > 1):
-        messagebox.showwarning("Direct Calling", "Can only connect to one contact at a time")
-        return
-
-    if (len(selectedUsers) == 0):
-        messagebox.showwarning("Direct Calling", "Need to specify a contact")
-        return
-
-    # request from server contact's details
-    CallUserRequest(selectedUsers[0])
-
-'''
 Send msg to server for buffering and append it to message queue for all selected users.
 Then display in outTray.
 '''
-def BufferedDisplay():
-    msg = inTray.get()
-
+def BufferedDisplay(msg):
     for user in selectedUsers:
         BufferMessageRequest(user, msg)
         with messageLock:
@@ -406,9 +171,8 @@ def BufferedDisplay():
 '''
 send message directly to other user, then display it
 '''
-def DirectCommDisplay():
-    msg = inTray.get()
-    data = TRANSLATE_CMD + "," + msg
+def DirectCommDisplay(msg):
+    data = prot.TRANSLATE_CMD + "," + msg
     transSocket.send(data.encode())
     inTray.delete(0, len(msg))
     with outTrayLock:
@@ -416,28 +180,8 @@ def DirectCommDisplay():
         outTray.insert(0, msg)
 
 '''
-the handling of any entered data depends on the mode we are on - direct communication 
-or buffered 
+displays on the outTray the received message
 '''
-def inTrayReady(event):
-    global transSocket
-    global directComm
-
-    if directComm:
-        DirectCommDisplay()
-    else:
-        BufferedDisplay()
-
-# loads the contacts list box from the contacts list
-def LoadContacs(lBox):
-    index = 0
-    for line in contacts:
-        contact = line[1]
-        lBox.insert(index, contact)
-        lBox.itemconfig(index, bg="#bdc1d6")
-        index += 1
-
-# displays on the outTray the received message
 def DispReceivedMessage(msg):
     with outTrayLock:
         for u in selectedUsers:
@@ -452,7 +196,9 @@ def DispReceivedMessage(msg):
                 outTray.itemconfig(0, bg="#bdc1d6")
                 outTray.itemconfig(0, foreground="black")
 
-# displays on the outTray all messages
+'''
+displays on the outTray all messages
+'''
 def DispMessages():
     with outTrayLock:
         outTray.delete(0, tk.END)
@@ -473,32 +219,384 @@ def DispMessages():
                         outTray.insert(0, "...")  # separating line
                         outTray.insert(0, data[MSG_DATA])
 
-# displays all downloaded messages, only used for debugging purposes
-def DispDownLoadedMessages():
-    for m in messages:
-        print(m)
+'''
+loads the languages list box and chooses current language
+'''
+def LoadLanguages(lBox):
+    for l in languages:
+        lBox.insert(l[2], l[0])
+
+    language = GetLanguageRequest()  # get language speaker currently uses
+
+    index = 0  # default index
+    for l in languages:
+        if l[1] == language:
+            index = l[2]
+
+    lBox.see(index)
+    lBox.activate(index)
+
+'''
+loads the contacts list box from the contacts list
+'''
+def LoadContacs(lBox):
+    index = 0
+    for line in contacts:
+        contact = line[1]
+        lBox.insert(index, contact)
+        lBox.itemconfig(index, bg="#bdc1d6")
+        index += 1
 
 '''
 downloads messages from the server. Only used at start up time.
 '''
 def DownLoadMessages():
-    DownLoadRequest()
+    DownLoadMessagesRequest()
     while True:
         fromServerSocket.settimeout(1.5)
         try:
             packet = fromServerSocket.recv(net.BUFFER_SIZE)
         except socket.timeout:
-            messagebox.showerror("Down Loading Messages", "Unable to down load messages - No Server")
+            messagebox.showerror(SUB_WINDOWS_TITLE, "Down Loading Messages: Unable to down load messages - No Server")
             exit(0)
         fromServerSocket.settimeout(None)
         m = packet.decode().split(",", 3)  # split into code, from, to, msg. The message may have commas
-        if m[0] == FINISH_DOWNLOAD:
+        if m[0] == prot.FINISH_DOWNLOAD:
             return
-        if m[0] == SENDING_MESSAGE:
+        if m[0] == prot.SENDING_MESSAGE:
             messages.append(m[1:])
 
 '''
-upon select contacts button selects from listbox all the selected contacts 
+displays all downloaded messages, only used for debugging purposes
+'''
+def DispDownLoadedMessages():
+    for m in messages:
+        print(m)
+
+'''
+================================= END UTILITY FUNCTIONS =====================================
+'''
+
+''' 
+============================== Functions to make requests to the server ==============================
+'''
+
+'''
+Records on the server our stream IP address and port number
+MESSAGE_TYPE, FROM_WHOM, STREAM_IP_ADDRESS, STREAM_PORT_NUMBER
+'''
+def RegisterUserRequest(reqRep, stream):
+    data = prot.REGISTER_USER + "," + BABELCHAT_USER + "," + reqRep[0] + "," + str(reqRep[1]) + "," + stream[0] + "," + str(
+        stream[1])
+    toServerSocket.send(data.encode())
+
+    fromServerSocket.settimeout(1.5)
+    try:
+        data = fromServerSocket.recv(net.BUFFER_SIZE)
+    except socket.timeout:
+        messagebox.showerror(SUB_WINDOWS_TITLE, "Registering Chat. Could not register chat - No server")
+        exit(0)
+    fromServerSocket.settimeout(None)
+    data = data.decode()
+    if data == prot.UNABLE_TO_REGISTER:
+        messagebox.showerror(SUB_WINDOWS_TITLE, "Registering Chat. Could not register with server")
+        exit(0)
+    if data == prot.USER_REGISTERED:
+        return
+
+'''
+tells server the user is no longer active
+'''
+def DeRegisterUserRequest():
+    data = prot.DE_REGISTER_USER + "," + BABELCHAT_USER
+    toServerSocket.send(data.encode())
+
+'''
+requests the given user's details from the server
+'''
+def GetUserRequest(user):
+    data = prot.GET_USER + "," + BABELCHAT_USER + "," + user
+    toServerSocket.send(data.encode())
+
+'''
+attempts a call to the given user
+'''
+def CallUserRequest(user):
+    data = prot.CALL_USER + "," + BABELCHAT_USER + "," + user
+    toServerSocket.send(data.encode())
+
+'''
+accepts/refuses a call request from a given user
+'''
+def AcceptCallRequest(user, accept):
+    if accept:
+        acceptCall = "TRUE"
+    else:
+        acceptCall = "FALSE"
+    data = prot.ACCEPT_CALL_USER + "," + BABELCHAT_USER + "," + user + "," + acceptCall
+    toServerSocket.send(data.encode())
+
+'''
+send message to buffer to server
+'''
+def BufferMessageRequest(user, msg):
+    # MESSAGE_TYPE, FOR_WHOM, FROM_WHOM, DATA
+    data = prot.BUFFER_MESSAGE + "," + user + "," + BABELCHAT_USER + "," + msg
+    toServerSocket.send(data.encode())
+
+'''
+Down load messages from server
+'''
+def DownLoadMessagesRequest():
+    data = prot.DOWNLOAD_MESSAGES + "," + BABELCHAT_USER
+    toServerSocket.send(data.encode())
+
+'''
+get language user currently speaks
+'''
+def GetLanguageRequest():
+    data = prot.GET_LANGUAGE + "," + BABELCHAT_USER
+    toServerSocket.send(data.encode())
+    packet = fromServerSocket.recv(net.BUFFER_SIZE)
+    data = packet.decode().split(",")
+    return data[1]
+
+'''
+set new language at server
+'''
+def SetLanguageRequest(code):
+    data = prot.SET_LANGUAGE + "," + BABELCHAT_USER + "," + code
+    toServerSocket.send(data.encode())
+
+'''
+request a translator
+get translator socket to exchange with server
+'''
+def GetTranslatorRequest():
+    global transSocket
+    global directCaller
+
+    transSocket = net.AnyReqRepSocket(LOCAL_HOST_IP_ADDR)
+    myDetails = transSocket.getsockname()
+
+    data = prot.GET_TRANSLATOR + "," + BABELCHAT_USER + "," + GetUser(directCaller) + "," + myDetails[0] + "," + str(myDetails[1])
+    toServerSocket.send(data.encode())
+
+    data = transSocket.recvfrom(net.BUFFER_SIZE)
+    transLocation = (data[1][0], data[1][1])
+    transSocket.connect(transLocation)
+
+'''
+============================ END OF FUNCTIONS THAT MAKE REQUESTS TO THE SERVER =====================
+'''
+
+'''
+======================= Functions to handle input from the server ============================
+==================== these run in a seperate thread ==========================================
+================ The only shared resource is the message list. The code to access this =======
+================ resource from this thread is protected by a lock ============================
+'''
+
+'''
+Handle input from the server. 
+'''
+def handleServerInput(inSocket):
+    while True:
+        packet = inSocket.recv(net.BUFFER_SIZE)
+        packet = packet.decode().split(",", 1)  # split into code, the rest
+        if packet[0] == prot.SENDING_MESSAGE:  # received a user message?
+            MessageArrived(packet[1])
+        elif packet[0] == prot.USER_NOT_REG:  # received a user not registered
+            messagebox.showinfo(SUB_WINDOWS_TITLE, "Direct Calling: " + GetContact(packet[1]) + " not available")
+        elif packet[0] == prot.USER_CALLING:  # received a call request
+            SomeoneCalling(packet[1])
+        elif packet[0] == prot.USER_ACCEPTED_CALL:  # received an accept call
+            AcceptCall(packet[1])
+        elif packet[0] == prot.DE_REGISTERED_COMPLETE:
+            return
+
+'''
+When a buffered message arrives store it in the message queue and display it on the outTray
+'''
+def MessageArrived(data):
+    msg = data.split(",", 2)  # split into from, to, msg
+    with messageLock:
+        messages.append(msg)  # append it to messages list
+    DispReceivedMessage(msg)  # shows message in outTray
+
+'''
+Some one has just called us. Reply to the request to call us depending on the user's
+choice
+'''
+def SomeoneCalling(data):
+    global directCaller
+
+    directCaller = GetContact(data)
+    msg = directCaller + " is calling. Accept Call?"
+    acceptCall = messagebox.askyesno(SUB_WINDOWS_TITLE, "Direct Calling: " + msg)
+    AcceptCallRequest(data, acceptCall)
+    if acceptCall:
+        directCallsThread = threading.Thread(target=HandleDirectCalls, args=(lSocket,), daemon=True)
+        directCallsThread.start()  # handle direct calls
+
+'''
+Handle whether the contact one has attempted to call directly has accepted one's attempt or not.
+If not give message and leave. Otherwise move to direct communication mode and connect directly 
+using byte stream
+'''
+def AcceptCall(data):
+    global peerSocket
+    global directCaller
+
+    data = data.split(",")
+    directCaller = GetContact(data[0])
+    if data[1] == "FALSE":
+        messagebox.showinfo(SUB_WINDOWS_TITLE, "Direct Calling: " +  directCaller + " refused call")
+        directCaller = ""
+        return
+
+    with peerLock:
+        if peerSocket != None:
+            peerSocket.close()
+            peerSocket = None
+        peerSocket = net.ConnectedStreamSocket((data[2], int(data[3])))
+    GetTranslatorRequest()
+    directCommThread = threading.Thread(target=HandleDirectComm, daemon=True)
+    directCommThread.start()                # handle input from other in point to point mode
+
+    SetDirectCommMode()
+
+'''
+======================== END of functions that handle input from the server thread ======================
+'''
+
+'''
+accept communication request from the other end
+this is a daemon thread, it dies by itself when program finished
+'''
+def HandleDirectCalls(lSocket):
+        global peerSocket
+
+#    while True:
+        inputs = [lSocket]
+        readable, _, _ = select.select(inputs, [], [])
+        if readable:
+            for s in readable:
+                if s == lSocket:
+                    with peerLock:
+                        if peerSocket != None:
+                            peerSocket.close()
+                            peerSocket = None
+                        peerSocket, _ = lSocket.accept()
+                    GetTranslatorRequest()
+                    directCommThread = threading.Thread(target=HandleDirectComm, daemon=True)
+                    directCommThread.start()  # handle input from other in point to point mode
+                    SetDirectCommMode()
+
+'''
+thread to handle the direct communication mode, where translator input is sent to peer,
+and other peer input is displayed. 
+'''
+def HandleDirectComm():
+    global peerSocket
+    global transSocket
+
+    while True:
+        inputs = [peerSocket, transSocket]
+        readable, _, _ = select.select(inputs, [], [])
+        if readable:
+            for s in readable:
+                if s is peerSocket:
+                    if not DoPeerSocket():
+                        return
+                elif s is transSocket:
+                    data = transSocket.recv(net.BUFFER_SIZE)
+                    peerSocket.send(data)
+
+'''
+handle the activity from the peerSocket
+'''
+def DoPeerSocket():
+    global directCaller
+
+    if peerSocket._closed:
+        return False
+    try:
+        data = peerSocket.recv(net.BUFFER_SIZE)
+    except ConnectionResetError:
+        messagebox.showinfo(SUB_WINDOWS_TITLE, "Lost connection to " + directCaller)
+        Disconnect()
+        return False
+    if not data:  # other end close connection?
+        Disconnect()
+        return False
+
+    inTray.delete(0, tk.END)
+    with outTrayLock:
+        outTray.insert(0, "...")  # separating line
+        outTray.insert(0, data.decode())
+        outTray.itemconfig(0, bg="#bdc1d6")
+        outTray.itemconfig(0, foreground="black")
+    return True
+
+'''
+GUI event handlers. The possible events are call button pressed, change language
+choose contact, in tray ready
+'''
+
+'''
+button pressed to choose a contact to communicate with or finish direct call
+'''
+def CallButton():
+    caption = callButton.cget("text")
+    if caption == "Call Contact":
+        CallContact()
+    else:
+        Disconnect()
+
+'''
+Call contact chosen
+'''
+def CallContact():
+    if (len(selectedUsers) > 1):
+        messagebox.showwarning(SUB_WINDOWS_TITLE, "Direct Calling: Can only connect to one contact at a time")
+        return
+
+    if (len(selectedUsers) == 0):
+        messagebox.showwarning(SUB_WINDOWS_TITLE, "Direct Calling: Need to specify a contact")
+        return
+
+    # request from server contact's details
+    CallUserRequest(selectedUsers[0])
+
+'''
+Disconnect a current active call.
+'''
+def Disconnect():
+    global transSocket
+
+    peerSocket.close()              # close peer connection
+    data = prot.STOP_TRANSLATING_CMD
+    transSocket.send(data.encode())  # stop translating thread
+    transSocket.close()
+
+    SetBufferedMode()               # change display mode to buffered mode
+
+'''
+the handling of any entered data depends on the mode we are on - direct communication 
+or buffered 
+'''
+def inTrayReady(event):
+    global directComm
+
+    msg = inTray.get()
+    if directComm:
+        DirectCommDisplay(msg)
+    else:
+        BufferedDisplay(msg)
+
+'''
+selects from listbox all the selected contacts 
 places them in the selectedContacts list and displays contacts on the message panel
 '''
 def SelectContacts(event):
@@ -540,22 +638,8 @@ def SelectLanguage(event):
     SetLanguageRequest(code)
 
 '''
-loads the languages list box and chooses current language
+END OF GUI event handlers =============================================================
 '''
-def LoadLanguages(lBox):
-    for l in languages:
-        lBox.insert(l[2], l[0])
-
-    language = GetLanguageRequest()  # get language speaker currently uses
-
-    index = 0  # default index
-    for l in languages:
-        if l[1] == language:
-            index = l[2]
-
-    lBox.see(index)
-    lBox.activate(index)
-
 '''
 create user interface. It consists of two panels, each being a canvas widget. The contacts panel
 holds a contacts listbox and language listbox. The message panel holds an entry widget to enter a message
@@ -642,16 +726,22 @@ directComm = False
 '''
 get a listening socket so that we can communicate one to one
 '''
-lSocket = net.getListeningSocket(LOCAL_HOST_IP_ADDR)
+lSocket = net.ListeningSocket(LOCAL_HOST_IP_ADDR)
 streamDetails = lSocket.getsockname()
+
+'''
+sockets that will be defined later on
+'''
+transSocket = None
+peerSocket = None
 
 '''
 We need two sockets to speak to the server. One for reading, the other for writing. 
 We need two because the reading and writing are done via different threads and 
 by having two sockets we avoid race conditions. 
 '''
-fromServerSocket = net.getConnectedReqRepSocket(LOCAL_HOST_IP_ADDR, SERVER)
-toServerSocket = net.getConnectedReqRepSocket(LOCAL_HOST_IP_ADDR, SERVER)
+fromServerSocket = net.ConnectedReqRepSocket(LOCAL_HOST_IP_ADDR, SERVER)
+toServerSocket = net.ConnectedReqRepSocket(LOCAL_HOST_IP_ADDR, SERVER)
 reqRepDetails = fromServerSocket.getsockname()
 
 '''
@@ -670,19 +760,18 @@ load listboxes
 LoadContacs(contactsLb)
 LoadLanguages(languageLb)
 
-transSocket = 0
-
-messageLock = threading.Lock()  # lock to ensure no simultaneous access to message list
-outTrayLock = threading.Lock()  # lock to ensure no simultaneous access to outTray
+'''
+These are locks to ensure that 
+'''
+messageLock = threading.Lock()  # no simultaneous access to message list
+outTrayLock = threading.Lock()  # no simultaneous access to outTray
+peerLock    = threading.Lock()  # no simultaneous access to peerSocket
 
 '''
 handle network activity
 '''
 serverThread = threading.Thread(target=handleServerInput, args=(fromServerSocket,))
 serverThread.start()  # handle input from the server
-
-directCallsThread = threading.Thread(target=HandleDirectCalls, args=(lSocket,))
-directCallsThread.start()  # handle direct calls
 
 '''
 handle input from the user
@@ -693,8 +782,6 @@ win.mainloop()
 tell server we have finished
 '''
 DeRegisterUserRequest()
-
-lSocket.close()  # shutdown cleanly thread to accept direct calls
 
 '''
 save all messages on a file for permanent storage

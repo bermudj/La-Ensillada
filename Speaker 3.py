@@ -22,10 +22,10 @@ NO_USER = ""
 
 LOCAL_HOST_IP_ADDR  = socket.gethostbyname(socket.gethostname())  # Local host IP address
 SERVER              = ("192.168.1.189", 65430)
-BABELCHAT_USER      = "00013"
-BABELCHAT_CONTACT   = "Jesus Bermudez"
-CONTACTS_FILE       = "Speaker1 Contacts"
-MESSAGE_FILE        = "Speaker1 Messages"
+BABELCHAT_USER      = "00004"
+BABELCHAT_CONTACT   = "Roger Dunn"
+CONTACTS_FILE       = "Speaker3 Contacts"
+MESSAGE_FILE        = "Speaker3 Messages"
 
 SUB_WINDOWS_TITLE   = "Babel Chat   " + BABELCHAT_CONTACT
 
@@ -410,7 +410,7 @@ def handleServerInput(inSocket):
             messagebox.showinfo(SUB_WINDOWS_TITLE, "Direct Calling: " + GetContact(packet[1]) + " not available")
         elif packet[0] == prot.USER_CALLING:  # received a call request
             SomeoneCalling(packet[1])
-        elif packet[0] == prot.USER_ACCEPTED_CALL:  # received an accept/reject notification
+        elif packet[0] == prot.USER_ACCEPTED_CALL:  # received an accept call
             AcceptCall(packet[1])
         elif packet[0] == prot.DE_REGISTERED_COMPLETE:
             return
